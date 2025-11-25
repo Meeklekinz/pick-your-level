@@ -452,6 +452,7 @@ INDEX_HTML = r"""
     .eventsRow { background:#0f1730; border-bottom:1px solid #243055; }
     .eventsRow:last-child { border-bottom:none; }
     .tag { font-family: ui-monospace, SFMono-Regular; font-size: 0.9rem; opacity: 0.95; }
+    .tabHi { background:#fbbf24; color:#0b1220; font-weight:900; border-radius:4px; }
   </style>
 </head>
 <body>
@@ -568,6 +569,7 @@ INDEX_HTML = r"""
   let currentSteps = [];
   let pitchTargets = []; // [{hz, name}]
   let currentView = "steps";
+  let rawTabText = "";
 
   function buildPitchTargets() {
     const map = new Map();
@@ -599,7 +601,8 @@ INDEX_HTML = r"""
     currentSteps = lvl.ui.steps || [];
     buildPitchTargets();
 
-    document.getElementById("tabPre").textContent = (lvl.ui.tab_text || "—");
+    rawTabText = String(lvl.ui.tab_text || "—");
+    tabPre.textContent = rawTabText;
 
     const bpm = (lvl.ui.default_bpm || 70);
     bpmEl.value = String(bpm);
@@ -651,6 +654,7 @@ INDEX_HTML = r"""
   const viewTabBtn = document.getElementById('viewTab');
   const stepsWrap = document.getElementById('stepsWrap');
   const tabWrap = document.getElementById('tabWrap');
+  const tabPre = document.getElementById('tabPre');
 
   bpmValEl.textContent = bpmEl.value;
   bpmEl.addEventListener('input', () => bpmValEl.textContent = bpmEl.value);
@@ -703,6 +707,48 @@ INDEX_HTML = r"""
     nowPlayEl.textContent = `Now: ${text}`;
   }
 
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (ch) => {
+      if (ch === '&') return '&amp;';
+      if (ch === '<') return '&lt;';
+      if (ch === '>') return '&gt;';
+      if (ch === '"') return '&quot;';
+      return '&#39;';
+    });
+  }
+
+  function renderTabHighlight(tick, stepKind = null) {
+    const kindToLinePrefix = { bass: "E|", b: "B|", e: "e|" };
+    const targetPrefix = kindToLinePrefix[stepKind] || null;
+
+    if (!Number.isFinite(tick) || tick < 0 || !rawTabText || !targetPrefix) {
+      tabPre.textContent = rawTabText;
+      return;
+    }
+
+    const beat = Math.floor(tick / 2);
+    const within = (tick % 2 === 0) ? 0 : 4;
+    const interiorOffset = 2 + (beat * 8) + within;
+    const absoluteIndexInLine = 2 + interiorOffset;
+
+    const prefixes = new Set(["e|", "B|", "G|", "D|", "A|", "E|"]);
+    const highlighted = rawTabText.split("\n").map((line) => {
+      const prefix = line.slice(0, 2);
+      if (!prefixes.has(prefix) || prefix !== targetPrefix) {
+        return escapeHtml(line);
+      }
+      if (absoluteIndexInLine < 0 || absoluteIndexInLine >= line.length) {
+        return escapeHtml(line);
+      }
+      const before = escapeHtml(line.slice(0, absoluteIndexInLine));
+      const hi = escapeHtml(line.charAt(absoluteIndexInLine));
+      const after = escapeHtml(line.slice(absoluteIndexInLine + 1));
+      return `${before}<span class="tabHi">${hi}</span>${after}`;
+    });
+
+    tabPre.innerHTML = highlighted.join("\n");
+  }
+
   // ===================
   // Reference player (shared for BOTH views)
   // ===================
@@ -740,24 +786,31 @@ INDEX_HTML = r"""
 
     const loops = 2;
     const total = currentSteps.length * loops;
+    const showSteps = (currentView === "steps");
+    const showTab = (currentView === "tab");
 
     for (let i = 0; i < total; i++) {
       const step = currentSteps[i % currentSteps.length];
       const t = start + i * stepDur;
+      const tick = i;
 
       playTone(guideFreqFor(step.kind), t);
 
       const nowText = `${step.count} — ${step.finger} on ${step.target}`;
       setTimeout(() => setNow(nowText), Math.max(0, (t - audioCtx.currentTime) * 1000));
 
-      if (currentView === "steps") {
-        setTimeout(() => renderSteps(i % currentSteps.length), Math.max(0, (t - audioCtx.currentTime) * 1000));
+      const delay = Math.max(0, (t - audioCtx.currentTime) * 1000);
+      if (showSteps) {
+        setTimeout(() => renderSteps(tick % currentSteps.length), delay);
+      } else if (showTab) {
+        setTimeout(() => renderTabHighlight(tick, step.kind), delay);
       }
     }
 
     const endMs = ((start + total * stepDur) - audioCtx.currentTime) * 1000 + 50;
     setTimeout(() => {
-      if (currentView === "steps") renderSteps(-1);
+      if (showSteps) renderSteps(-1);
+      renderTabHighlight(-1);
       setNow("—");
     }, Math.max(0, endMs));
   };
