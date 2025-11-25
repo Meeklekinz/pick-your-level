@@ -819,25 +819,40 @@ INDEX_HTML = r"""
     const step = currentSteps[tick % currentSteps.length];
     const when = audioCtx.currentTime + 0.04;
 
-      playTone(guideFreqFor(step.kind), t);
+    playTone(guideFreqFor(step.kind), when);
 
+    const uiDelay = Math.max(0, (when - audioCtx.currentTime) * 1000);
+    setTimeout(() => {
+      if (!refPlaying) return;
       const nowText = `${step.count} — ${step.finger} on ${step.target}`;
-      setTimeout(() => setNow(nowText), Math.max(0, (t - audioCtx.currentTime) * 1000));
+      setNow(nowText);
 
-      const delay = Math.max(0, (t - audioCtx.currentTime) * 1000);
       if (showSteps) {
-        setTimeout(() => renderSteps(tick % currentSteps.length), delay);
+        renderSteps(tick % currentSteps.length);
       } else if (showTab) {
-        setTimeout(() => renderTabHighlight(tick, step.kind), delay);
+        renderTabHighlight(tick % 16, step.kind);
       }
+    }, uiDelay);
+
+    refTick += 1;
+    const delayMs = Math.max(20, stepDur * 1000);
+    refTimer = setTimeout(scheduleTick, delayMs);
+  }
+
+  playRefBtn.onclick = async () => {
+    if (!currentSteps.length) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    if (refPlaying) {
+      stopReference();
+      return;
     }
 
-    const endMs = ((start + total * stepDur) - audioCtx.currentTime) * 1000 + 50;
-    setTimeout(() => {
-      if (showSteps) renderSteps(-1);
-      renderTabHighlight(-1);
-      setNow("—");
-    }, Math.max(0, endMs));
+    refPlaying = true;
+    refTick = 0;
+    setNow("starting…");
+    playRefBtn.textContent = "Stop Reference";
+    scheduleTick();
   };
 
   // ===================
