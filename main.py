@@ -99,8 +99,8 @@ LEVELS: Dict[str, LevelSpec] = {
         sr=22050,
         expected_hz=[E2, B3, E2, E4, E2, B3, E2, E4],
         cents_tolerance=60.0,     # generous for phone mics/noise
-        min_loops_to_pass=2,
-        max_timing_cv=0.18,
+        min_loops_to_pass=1,
+        max_timing_cv=0.24,
         max_mute_rate=0.18,
         min_pitch_acc=0.82,
         ui=LevelUI(
@@ -258,7 +258,6 @@ def score_pitch_targets_v1(
         target = expected[i % len(expected)]
         f = pitches[i]
         attack = attacks[i]
-        sustain_ratio = sustain_ratios[i]
 
         is_miss = (attack < miss_thresh) or (f <= 0.0)
         if is_miss:
@@ -267,18 +266,15 @@ def score_pitch_targets_v1(
             continue
 
         cd = abs(cents_diff(f, target))
-        ok_pitch = cd <= spec.cents_tolerance
+        ok_pitch = True  # pitch/string choice not scored
 
-        # Muted heuristic: sustain dies fast
-        is_muted = sustain_ratio < 0.22
-        if is_muted:
-            muted += 1
+        is_muted = False  # mute detection disabled for scoring
 
         if ok_pitch:
             correct_pitch += 1
-            res = "ok_muted" if is_muted else "ok"
+            res = "ok"
         else:
-            res = "wrong_muted" if is_muted else "wrong"
+            res = "wrong"
 
         per_event.append({
             "i": i,
@@ -286,11 +282,10 @@ def score_pitch_targets_v1(
             "f0_hz": f,
             "cents_off": float(cd),
             "attack": float(attack),
-            "sustain_ratio": float(sustain_ratio),
             "result": res,
         })
 
-    pitch_acc = correct_pitch / max(1, (usable - missed))
+    pitch_acc = None  # not scored
     mute_rate = muted / max(1, usable)
 
     # Timing stability = coefficient of variation of inter-onset-intervals
@@ -311,9 +306,6 @@ def score_pitch_targets_v1(
 
     passed = (
         clean_loops >= spec.min_loops_to_pass
-        and pitch_acc >= spec.min_pitch_acc
-        and mute_rate <= spec.max_mute_rate
-        and timing_cv <= spec.max_timing_cv
     )
 
     reason = None
@@ -321,10 +313,6 @@ def score_pitch_targets_v1(
         bits = []
         if clean_loops < spec.min_loops_to_pass:
             bits.append(f"Need {spec.min_loops_to_pass} clean loops (you got {clean_loops}).")
-        if pitch_acc < spec.min_pitch_acc:
-            bits.append(f"Pitch accuracy low ({pitch_acc:.0%}). Likely wrong-string hits or swaps.")
-        if mute_rate > spec.max_mute_rate:
-            bits.append(f"Muted-note rate high ({mute_rate:.0%}). Watch palm/hand contact.")
         if timing_cv > spec.max_timing_cv:
             bits.append(f"Timing unstable (CV {timing_cv:.2f}). Slow down and count out loud.")
         reason = " ".join(bits) if bits else "Try again with a cleaner recording."
@@ -834,13 +822,11 @@ INDEX_HTML = r"""
   function coachMessage(data) {
     const miss = data.missed_hits || 0;
     const muteRate = data.mute_rate || 0;
-    const pitchAcc = data.pitch_accuracy || 0;
     const timingCV = data.timing_cv || 999;
 
     if (miss >= 3) return { title: "Main issue: missed strings", text: "Plant → pluck: touch the target (B/e) before plucking. Also record closer + play a bit louder." };
     if (muteRate > 0.22) return { title: "Main issue: muted notes", text: "Your palm/hand is touching strings after pluck. Float the heel of your hand; don’t anchor on the bridge." };
-    if (pitchAcc < 0.82) return { title: "Main issue: wrong-string swaps", text: "Slow down. Keep pick assigned to low E only; middle assigned to B/high e only. Plant on target string." };
-    if (timingCV > 0.18) return { title: "Main issue: timing wobble", text: "Drop tempo and count out loud. Use Play Reference at 60–70 BPM, then match it." };
+    if (timingCV > 0.24) return { title: "Main issue: timing wobble", text: "Drop tempo and count out loud. Use Play Reference at 60–70 BPM, then match it." };
     return { title: "Nice work", text: "Keep going—aim for more clean loops in a row." };
   }
 
@@ -882,9 +868,13 @@ INDEX_HTML = r"""
 
       kpisEl.appendChild(pill('Detected plucks', data.detected_onsets ?? '—', null));
       kpisEl.appendChild(pill('Clean loops', `${data.clean_loops}/${data.loops_total}`, passed ? true : false));
-      kpisEl.appendChild(pill('Pitch accuracy', `${Math.round((data.pitch_accuracy||0)*100)}%`, (data.pitch_accuracy||0) >= 0.82));
+      if (data.pitch_accuracy === null || data.pitch_accuracy === undefined) {
+        kpisEl.appendChild(pill('Pitch accuracy', 'Not scored', null));
+      } else {
+        kpisEl.appendChild(pill('Pitch accuracy', `${Math.round((data.pitch_accuracy||0)*100)}%`, (data.pitch_accuracy||0) >= 0.82));
+      }
       kpisEl.appendChild(pill('Mute rate', `${Math.round((data.mute_rate||0)*100)}%`, (data.mute_rate||0) <= 0.18));
-      kpisEl.appendChild(pill('Timing CV', (data.timing_cv||0).toFixed(2), (data.timing_cv||9) <= 0.18));
+      kpisEl.appendChild(pill('Timing CV', (data.timing_cv||0).toFixed(2), (data.timing_cv||9) <= 0.24));
       kpisEl.appendChild(pill('Missed hits', data.missed_hits ?? '—', (data.missed_hits||0) <= 2));
 
       const evs = (data.events || []).slice(0, 24);
