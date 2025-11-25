@@ -717,8 +717,11 @@ INDEX_HTML = r"""
     });
   }
 
-  function renderTabHighlight(tick) {
-    if (!Number.isFinite(tick) || tick < 0 || !rawTabText) {
+  function renderTabHighlight(tick, stepKind = null) {
+    const kindToLinePrefix = { bass: "E|", b: "B|", e: "e|" };
+    const targetPrefix = kindToLinePrefix[stepKind] || null;
+
+    if (!Number.isFinite(tick) || tick < 0 || !rawTabText || !targetPrefix) {
       tabPre.textContent = rawTabText;
       return;
     }
@@ -731,7 +734,7 @@ INDEX_HTML = r"""
     const prefixes = new Set(["e|", "B|", "G|", "D|", "A|", "E|"]);
     const highlighted = rawTabText.split("\n").map((line) => {
       const prefix = line.slice(0, 2);
-      if (!prefixes.has(prefix)) {
+      if (!prefixes.has(prefix) || prefix !== targetPrefix) {
         return escapeHtml(line);
       }
       if (absoluteIndexInLine < 0 || absoluteIndexInLine >= line.length) {
@@ -800,7 +803,7 @@ INDEX_HTML = r"""
       if (showSteps) {
         setTimeout(() => renderSteps(tick % currentSteps.length), delay);
       } else if (showTab) {
-        setTimeout(() => renderTabHighlight(tick), delay);
+        setTimeout(() => renderTabHighlight(tick, step.kind), delay);
       }
     }
 
