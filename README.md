@@ -1,43 +1,31 @@
-# Pick Your Level (MVP)
+# Pick Your Level
 
-**Pick. Score. Level up.**
-A tiny local web app that “gamifies” fingerpicking practice.
-You pick a Level, upload a short phone clip (audio or video), and the app scores it:
-- onset detection (did you play enough plucks?)
-- pitch target matching (wrong-string swaps)
-- muted-note heuristic
-- timing stability
+Practice helper with built‑in metronome, step guide, and TAB follow‑along. Pick a level, use the reference player, record a short clip (audio or video), and get quick feedback.
 
-**Privacy**: Uploads are stored only in a temporary directory during analysis and deleted immediately after scoring.
+**Privacy:** Uploads live only in a temp directory during analysis and are deleted right after.
 
-## What this version (Lane Lock) expects you to play
-Count: **1 & 2 & 3 & 4 &**
+## Current Level (Lane Lock)
+- Count: **1 & 2 & 3 & 4 &** (8 plucks per loop, two bars of 8th notes)
+- Targets: low E open on 1/2/3/4, B open on & of 1/3, high e open on & of 2/4
+- Views: **8-Step Pattern** tiles or **2-Bar TAB** with moving highlight
+- Play Reference: toggle button runs a continuous metronome + guide tones; TAB highlight tracks 16 ticks (two loops) when TAB view is active
 
-- Beats (1,2,3,4): **low E open** (E2)
-- & of 1 and 3: **B string open** (B3)
-- & of 2 and 4: **high E open** (E4)
+## How scoring works (lenient)
+- Needs at least **one clean loop** (no misses) to pass; pitch/string choice and muting are *not* graded.
+- Timing CV is reported for coaching, but timing wobble does **not** fail you.
+- KPIs show detected plucks, clean loops, timing CV, and misses; pitch accuracy shows “Not scored.”
 
 ## Requirements
 - Python 3.10+
-- **ffmpeg** installed and available on your PATH
+- `ffmpeg` on your PATH
+  - macOS: `brew install ffmpeg`
+  - Ubuntu/Debian: `sudo apt-get install ffmpeg`
+  - Fedora/RHEL/CentOS: `sudo dnf install ffmpeg`
 
-### Install ffmpeg
-- macOS: `brew install ffmpeg`
-- Ubuntu/Debian: `sudo apt-get install ffmpeg`
-- Fedora/RHEL/CentOS: `sudo dnf install ffmpeg`
-
-## Setup (VS Code friendly)
-1) Unzip this project.
-2) Open the folder in VS Code.
-3) Create a venv + install deps:
-
+## Setup
 ```bash
 python -m venv .venv
-# mac/linux
-source .venv/bin/activate
-# windows powershell:
-# .venv\Scripts\Activate.ps1
-
+source .venv/bin/activate  # Windows: .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
@@ -45,23 +33,17 @@ pip install -r requirements.txt
 ```bash
 uvicorn main:app --reload
 ```
+Open http://127.0.0.1:8000
 
-Open:
-- http://127.0.0.1:8000
-
-## Upload directly from your phone (optional)
-Run:
+To upload from your phone on LAN:
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+Then visit `http://<your-laptop-LAN-IP>:8000` (trusted network only).
 
-Then visit:
-- `http://<your-laptop-LAN-IP>:8000`
-
-**Tip**: only do this on a trusted network and stop the server when you’re done.
-
-## Next improvements you can add
-- More Levels (patterns, chord changes)
-- A metronome / click track for better timing scoring
-- Better mute detection (spectral decay curves)
-- User profiles + XP saved in a local SQLite DB
+## Using the app
+1) Pick a level (Lane Lock). Beginner View shows steps/TAB and tips; turning it off shows a compact summary.
+2) Use **Play Reference** to hear/metronome the pattern; TAB view highlights the active subdivision on the right string.
+3) Set tempo with the slider.
+4) Record and upload a ~8–15s clip (one or two loops is fine).
+5) Read the scoreboard and coaching note; timing advice appears if wobble is high.
