@@ -520,6 +520,14 @@ INDEX_HTML = r"""
           </div>
         </div>
 
+        <div id="summaryPanel" class="coach small" style="display:none;">
+          <div style="font-weight:900; margin-bottom:6px;" id="summaryTitle">Level overview</div>
+          <div><b>Count:</b> <span id="summaryCount">—</span></div>
+          <div><b>Legend:</b> <span id="summaryLegend">—</span></div>
+          <div><b>Recording tip:</b> <span id="summaryRecordingTip">—</span></div>
+          <div style="margin-top:8px; opacity:0.9;">Toggle Beginner View back on for guided steps, TAB highlight, and the reference player.</div>
+        </div>
+        
         <h3 style="margin:16px 0 8px 0;">Upload a clip</h3>
         <input id="file" type="file" accept="audio/*,video/*"/>
 
@@ -597,6 +605,10 @@ INDEX_HTML = r"""
     renderBullets(lvl.ui.bullets || []);
     document.getElementById("uiLegend").textContent = (lvl.ui.legend || "");
     document.getElementById("uiRecordingTip").textContent = (lvl.ui.recording_tip || "");
+    summaryTitle.textContent = lvl.name || "Level overview";
+    summaryCount.textContent = (lvl.ui.count_text || "");
+    summaryLegend.textContent = (lvl.ui.legend || "");
+    summaryRecordingTip.textContent = (lvl.ui.recording_tip || "");
 
     currentSteps = lvl.ui.steps || [];
     buildPitchTargets();
@@ -639,6 +651,11 @@ INDEX_HTML = r"""
   const tipsEl = document.getElementById('tips');
   const beginnerToggle = document.getElementById('beginner');
   const beginnerPanel = document.getElementById('beginnerPanel');
+  const summaryPanel = document.getElementById('summaryPanel');
+  const summaryTitle = document.getElementById('summaryTitle');
+  const summaryCount = document.getElementById('summaryCount');
+  const summaryLegend = document.getElementById('summaryLegend');
+  const summaryRecordingTip = document.getElementById('summaryRecordingTip');
 
   const stepsEl = document.getElementById('steps');
   const playRefBtn = document.getElementById('playRef');
@@ -661,7 +678,9 @@ INDEX_HTML = r"""
 
   tipsBtn.onclick = () => { tipsEl.style.display = tipsEl.style.display === 'none' ? 'block' : 'none'; };
   beginnerToggle.addEventListener('change', () => {
-    beginnerPanel.style.display = beginnerToggle.checked ? 'block' : 'none';
+    const showBeginner = beginnerToggle.checked;
+    beginnerPanel.style.display = showBeginner ? 'block' : 'none';
+    summaryPanel.style.display = showBeginner ? 'none' : 'block';
   });
 
   fileEl.addEventListener('change', () => {
@@ -753,7 +772,10 @@ INDEX_HTML = r"""
   // Reference player (shared for BOTH views)
   // ===================
   let audioCtx = null;
-
+  let refPlaying = false;
+  let refTimer = null;
+  let refTick = 0;
+  
   function playTone(freq, time, dur=0.07) {
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
@@ -773,26 +795,29 @@ INDEX_HTML = r"""
     return 659.25;
   }
 
-  playRefBtn.onclick = async () => {
-    if (!currentSteps.length) return;
+  function stopReference() {
+    refPlaying = false;
+    if (refTimer) {
+      clearTimeout(refTimer);
+      refTimer = null;
+    }
+    renderSteps(-1);
+    renderTabHighlight(-1);
+    setNow("—");
+    playRefBtn.textContent = "Play Reference (metronome + guide)";
+  }
 
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function scheduleTick() {
+    if (!refPlaying || !currentSteps.length) return;
 
-    const bpm = parseInt(bpmEl.value, 10);
+    const bpm = parseInt(bpmEl.value, 10) || 60;
     const stepDur = (60 / bpm) / 2; // 8th notes
-    const start = audioCtx.currentTime + 0.12;
-
-    setNow("starting…");
-
-    const loops = 2;
-    const total = currentSteps.length * loops;
     const showSteps = (currentView === "steps");
     const showTab = (currentView === "tab");
 
-    for (let i = 0; i < total; i++) {
-      const step = currentSteps[i % currentSteps.length];
-      const t = start + i * stepDur;
-      const tick = i;
+    const tick = refTick;
+    const step = currentSteps[tick % currentSteps.length];
+    const when = audioCtx.currentTime + 0.04;
 
       playTone(guideFreqFor(step.kind), t);
 
